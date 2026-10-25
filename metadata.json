@@ -1,0 +1,6 @@
+{
+  "name": "FocusFlight - 3D Aviation Focus & Pomodoro Timer",
+  "description": "Book a flight between world airports, tear your boarding pass stub, and track your focus journey across a 3D globe with real-time flight telemetry, weather updates, and boarding announcements.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
