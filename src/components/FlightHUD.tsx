@@ -135,6 +135,55 @@ export const FlightHUD: React.FC<FlightHUDProps> = ({
         </div>
       </div>
 
+      {/* FLOATING TIME TO ARRIVAL (Automatically shown above the globe when controls are hidden) */}
+      {isCollapsed && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-30 pointer-events-auto animate-in fade-in slide-in-from-top-3 duration-300">
+          <div className="bg-slate-900/95 border border-sky-500/50 px-5 py-3 rounded-2xl backdrop-blur-md shadow-2xl flex items-center gap-4 ring-1 ring-sky-500/30">
+            <div className="text-left">
+              <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-sky-400 block">
+                TIME TO ARRIVAL
+              </span>
+              <span className="text-3xl font-black font-mono tracking-tight text-white block">
+                {timeFormatted}
+              </span>
+            </div>
+
+            <div className="h-8 w-px bg-slate-800" />
+
+            <div className="text-right">
+              <div className="flex items-center gap-2 justify-end">
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    isPaused ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'
+                  }`}
+                />
+                <span className="text-[11px] font-mono font-bold text-sky-300 uppercase">
+                  {isPaused ? 'HOLDING' : `${(progress * 100).toFixed(1)}% Completed`}
+                </span>
+              </div>
+              <span className="text-xs font-mono font-semibold text-slate-300 block mt-0.5">
+                {distanceRemaining.toLocaleString()} km to {booking.destination.iata}
+              </span>
+            </div>
+
+            <div className="h-8 w-px bg-slate-800" />
+
+            <button
+              type="button"
+              onClick={onTogglePause}
+              title={isPaused ? "Resume flight" : "Pause flight"}
+              className={`p-2 rounded-xl transition-all cursor-pointer ${
+                isPaused
+                  ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 ring-2 ring-amber-400/50'
+                  : 'bg-slate-800 hover:bg-slate-700 text-white'
+              }`}
+            >
+              {isPaused ? <Play className="w-4 h-4 fill-current" /> : <Pause className="w-4 h-4 fill-current" />}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* COLLAPSED BUTTON: Positioned right at the very bottom edge of the screen */}
       {isCollapsed && (
         <div className="fixed bottom-0 left-1/2 -translate-x-1/2 z-40">

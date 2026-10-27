@@ -77,10 +77,10 @@ export function generateFlightPathPoints(
     
     currentNorm.copy(startNorm).applyQuaternion(qCurrent).normalize();
 
-    // Altitude profile: smooth sine curve peaking at mid-flight
-    // Smooth takeoff and landing profile
+    // Baseline ground/tarmac clearance so aircraft wings and fuselage never clip into the globe surface at spawn/takeoff/landing
+    const baselineClearance = 0.055;
     const altitude = Math.sin(t * Math.PI) * maxAltitudeBump;
-    const r = globeRadius + altitude;
+    const r = globeRadius + baselineClearance + altitude;
 
     points.push(currentNorm.multiplyScalar(r));
   }

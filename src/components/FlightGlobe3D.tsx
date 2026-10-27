@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as topojson from 'topojson-client';
 import { geoEquirectangular, geoPath } from 'd3-geo';
 import { Compass } from 'lucide-react';
@@ -102,9 +103,9 @@ export const FlightGlobe3D: React.FC<FlightGlobe3DProps> = ({
     const scene = new THREE.Scene();
     sceneRef.current = scene;
 
-    // Camera setup - The GLOBE is strictly centered in the middle of the screen
+    // Camera setup - Calibrated orbit distance of 5.8 units with zero initial offset
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
-    camera.position.set(0, 1.8, 7.8);
+    camera.position.set(0, 0, 5.8);
 
     const renderer = new THREE.WebGLRenderer({
       antialias: !isSoftwareGl,
@@ -119,17 +120,17 @@ export const FlightGlobe3D: React.FC<FlightGlobe3DProps> = ({
     rendererRef.current = renderer;
     container.appendChild(renderer.domElement);
 
-    // Orbit Controls - Target is strictly (0, 0, 0) so the Globe is always the dead center
+    // Orbit Controls
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = !isSoftwareGl;
     controls.dampingFactor = 0.05;
     controls.minDistance = 3.2;
-    controls.maxDistance = 18.0;
+    controls.maxDistance = 16.0;
     controls.rotateSpeed = 0.7;
-    controls.target.set(0, 0, 0); // Center on Globe!
+    controls.target.set(0, 0, 0);
     controlsRef.current = controls;
 
-    // Lighting: Sun Light + Fill + Ambient + Hemisphere
+    // Lighting
     const sunLight = new THREE.DirectionalLight(0xffffff, 2.6);
     sunLight.position.set(8, 10, 10);
     scene.add(sunLight);
@@ -167,27 +168,53 @@ export const FlightGlobe3D: React.FC<FlightGlobe3DProps> = ({
     scene.add(starField);
 
     // ==============================================================
-    // 100% REAL GEOGRAPHIC EARTH TEXTURE USING NATURAL EARTH 50M DATA
+    // CRISP HIGH-RESOLUTION 4K GEOGRAPHIC EARTH MAP (NATURAL EARTH 50M)
     // ==============================================================
     const globeRadius = 2.5;
 
     function createAuthenticEarthTexture(): THREE.CanvasTexture {
       const canvas = document.createElement('canvas');
-      canvas.width = 2048;
-      canvas.height = 1024;
+      canvas.width = 4096;
+      canvas.height = 2048;
       const ctx = canvas.getContext('2d')!;
 
-      // 1. Pristine ocean gradient
+      // 1. Pristine ocean styling
       const oceanGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-      oceanGrad.addColorStop(0, '#0c233c');
-      oceanGrad.addColorStop(0.3, '#103050');
-      oceanGrad.addColorStop(0.5, '#133a62');
-      oceanGrad.addColorStop(0.7, '#103050');
-      oceanGrad.addColorStop(1, '#0c233c');
+      oceanGrad.addColorStop(0, '#091c36');
+      oceanGrad.addColorStop(0.25, '#0d284a');
+      oceanGrad.addColorStop(0.5, '#12345d');
+      oceanGrad.addColorStop(0.75, '#0d284a');
+      oceanGrad.addColorStop(1, '#091c36');
       ctx.fillStyle = oceanGrad;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // 2. Set up clean mathematical projection matching Three.js SphereGeometry UVs
+      // 2. Subtle Aeronautical Navigation Graticule Grid
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.08)';
+      ctx.lineWidth = 1;
+      for (let lat = -80; lat <= 80; lat += 20) {
+        const y = ((90 - lat) / 180) * canvas.height;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+      }
+      for (let lng = -180; lng <= 180; lng += 30) {
+        const x = ((lng + 180) / 360) * canvas.width;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+      }
+
+      // Equator & Prime Meridian accents
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.18)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(0, canvas.height / 2);
+      ctx.lineTo(canvas.width, canvas.height / 2);
+      ctx.stroke();
+
+      // 3. Mathematical equirectangular projection matching Three.js SphereGeometry UVs
       const projection = geoEquirectangular()
         .scale(canvas.width / (2 * Math.PI))
         .translate([canvas.width / 2, canvas.height / 2]);
@@ -201,31 +228,40 @@ export const FlightGlobe3D: React.FC<FlightGlobe3DProps> = ({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const borders = topojson.mesh(topology, topology.objects.countries, (a: any, b: any) => a !== b) as any;
 
-      // 3. Draw authentic continents & sovereign landmasses
-      ctx.fillStyle = '#1e3e68'; // Clean landmass fill
-      ctx.strokeStyle = '#38bdf8'; // Clean coastal outline
-      ctx.lineWidth = 1.2;
-
+      // 4. Fill landmasses with crisp high-contrast tone
+      ctx.fillStyle = '#1c3e6b';
       ctx.beginPath();
       pathGenerator(countries);
       ctx.fill();
+
+      // 5. Razor-sharp sky-blue coastal outline (2.4px on 4K)
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      pathGenerator(countries);
       ctx.stroke();
 
-      // 4. Draw clean sovereign international country borders (no random lines or grid artifacts)
-      ctx.strokeStyle = 'rgba(147, 197, 253, 0.7)';
-      ctx.lineWidth = 1.0;
+      // 6. Crisp sovereign international country borders
+      ctx.strokeStyle = 'rgba(147, 197, 253, 0.75)';
+      ctx.lineWidth = 1.3;
       ctx.beginPath();
       pathGenerator(borders);
       ctx.stroke();
 
       const texture = new THREE.CanvasTexture(canvas);
       texture.colorSpace = THREE.SRGBColorSpace;
+      texture.generateMipmaps = true;
+      texture.minFilter = THREE.LinearMipmapLinearFilter;
+      texture.magFilter = THREE.LinearFilter;
       texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      texture.wrapS = THREE.ClampToEdgeWrapping;
+      texture.wrapT = THREE.ClampToEdgeWrapping;
+      texture.needsUpdate = true;
       return texture;
     }
 
     const earthTexture = createAuthenticEarthTexture();
-    const globeGeo = new THREE.SphereGeometry(globeRadius, 64, 64);
+    const globeGeo = new THREE.SphereGeometry(globeRadius, 96, 96);
     const globeMat = new THREE.MeshStandardMaterial({
       map: earthTexture,
       roughness: 0.55,
@@ -284,7 +320,7 @@ export const FlightGlobe3D: React.FC<FlightGlobe3DProps> = ({
     scene.add(depMarker);
     scene.add(destMarker);
 
-    // Flight Path Arc
+    // Flight Path Arc with built-in baseline ground clearance
     const points = generateFlightPathPoints(
       departure.lat,
       departure.lng,
@@ -319,148 +355,104 @@ export const FlightGlobe3D: React.FC<FlightGlobe3DProps> = ({
     scene.add(trailLine);
     trailRef.current = trailLine;
 
-    // Procedural Aircraft
-    function createProceduralAircraft(): THREE.Group {
-      const plane = new THREE.Group();
-      const parsedAirline = parseInt(airlineColor.replace('#', '0x'), 16) || 0x0ea5e9;
+    // ==============================================================
+    // AUTHENTIC 3D AIRCRAFT MODEL (BOEING 737 / AIRBUS A380 PROPORTIONS)
+    // ==============================================================
+    const aircraftGroup = new THREE.Group();
+    scene.add(aircraftGroup);
+    aircraftRef.current = aircraftGroup;
 
-      const fuselageMat = new THREE.MeshStandardMaterial({
-        color: 0xf8fafc,
-        roughness: 0.25,
-        metalness: 0.4,
-      });
+    // Load authentic Boeing 737 glTF 3D model
+    const gltfLoader = new GLTFLoader();
+    gltfLoader.load(
+      '/models/B737.glb',
+      (gltf) => {
+        const model = gltf.scene;
 
-      const wingMat = new THREE.MeshStandardMaterial({
-        color: 0xe2e8f0,
-        roughness: 0.3,
-        metalness: 0.3,
-      });
+        // Compute original model bounding box and center
+        const box = new THREE.Box3().setFromObject(model);
+        const center = new THREE.Vector3();
+        box.getCenter(center);
+        const size = new THREE.Vector3();
+        box.getSize(size);
 
-      const airlineMat = new THREE.MeshStandardMaterial({
-        color: parsedAirline,
-        roughness: 0.3,
-        metalness: 0.5,
-      });
+        // Center model geometry locally at (0, 0, 0)
+        model.position.x -= center.x;
+        model.position.y -= center.y;
+        model.position.z -= center.z;
 
-      const glassMat = new THREE.MeshPhysicalMaterial({
-        color: 0x0284c7,
-        roughness: 0.1,
-        metalness: 0.9,
-        clearcoat: 1.0,
-      });
+        // Container to handle rotation & scaling
+        const modelWrapper = new THREE.Group();
+        modelWrapper.add(model);
 
-      const bodyGeo = new THREE.CylinderGeometry(0.045, 0.038, 0.42, 16);
-      bodyGeo.rotateX(Math.PI / 2);
-      const fuselage = new THREE.Mesh(bodyGeo, fuselageMat);
-      plane.add(fuselage);
+        // Rotate -90 degrees around Y:
+        // In Three.js, Object3D.lookAt() aligns local +Z with the target direction.
+        // In B737.glb: Nose is at +X, Tail at -X, Up is +Y, Wings along Z.
+        // Rotating by -Math.PI / 2 (-90 deg) maps:
+        // - Nose (+X) -> +Z (faces forward along flight tangent toward destination)
+        // - Tail (-X) -> -Z (trails aft behind the aircraft)
+        // - Left wing (Port) -> -X (with red navigation strobe)
+        // - Right wing (Starboard) -> +X (with green navigation strobe)
+        // - Up (+Y) -> +Y (space altitude away from Earth surface)
+        modelWrapper.rotation.y = -Math.PI / 2;
 
-      const noseGeo = new THREE.ConeGeometry(0.044, 0.12, 16);
-      noseGeo.rotateX(Math.PI / 2);
-      const nose = new THREE.Mesh(noseGeo, fuselageMat);
-      nose.position.z = 0.26;
-      plane.add(nose);
+        // Scale to realistic proportion relative to the Earth globe
+        // Wingspan / length target of 0.16 units gives true airliner scale without clipping
+        const maxDim = Math.max(size.x, size.z);
+        const targetSize = 0.16;
+        const scaleFactor = targetSize / maxDim;
+        modelWrapper.scale.set(scaleFactor, scaleFactor, scaleFactor);
 
-      const cockpitGeo = new THREE.SphereGeometry(0.035, 12, 12, 0, Math.PI, 0, Math.PI / 2);
-      cockpitGeo.rotateX(Math.PI / 3);
-      const cockpit = new THREE.Mesh(cockpitGeo, glassMat);
-      cockpit.position.set(0, 0.025, 0.2);
-      cockpit.scale.set(0.9, 0.6, 1.2);
-      plane.add(cockpit);
+        // Lift model slightly above trajectory point so wheels/belly/wings sit 100% outside the globe
+        modelWrapper.position.y = 0.015;
 
-      const wingShape = new THREE.Shape();
-      wingShape.moveTo(0, 0);
-      wingShape.lineTo(0.38, -0.16);
-      wingShape.lineTo(0.36, -0.22);
-      wingShape.lineTo(0, -0.06);
-      wingShape.closePath();
+        // Enhance textures and materials
+        model.traverse((child) => {
+          if ((child as THREE.Mesh).isMesh) {
+            const mesh = child as THREE.Mesh;
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            if (mesh.material) {
+              const mat = mesh.material as THREE.MeshStandardMaterial;
+              mat.roughness = 0.28;
+              mat.metalness = 0.3;
+            }
+          }
+        });
 
-      const wingExtrude = new THREE.ExtrudeGeometry(wingShape, { depth: 0.008, bevelEnabled: false });
-      wingExtrude.rotateX(Math.PI / 2);
+        // Add wingtip & tail navigation strobes in aircraftGroup (+Z forward, -X port, +X starboard)
+        const strobeGeo = new THREE.SphereGeometry(0.0035, 8, 8);
+        const redStrobe = new THREE.Mesh(strobeGeo, new THREE.MeshBasicMaterial({ color: 0xef4444 }));
+        redStrobe.position.set(-targetSize * 0.48, 0.018, -targetSize * 0.1);
 
-      const rightWing = new THREE.Mesh(wingExtrude, wingMat);
-      rightWing.position.set(0.02, 0.0, 0.05);
-      plane.add(rightWing);
+        const greenStrobe = new THREE.Mesh(strobeGeo, new THREE.MeshBasicMaterial({ color: 0x22c55e }));
+        greenStrobe.position.set(targetSize * 0.48, 0.018, -targetSize * 0.1);
 
-      const leftWing = new THREE.Mesh(wingExtrude, wingMat);
-      leftWing.scale.set(-1, 1, 1);
-      leftWing.position.set(-0.02, 0.0, 0.05);
-      plane.add(leftWing);
+        const tailStrobe = new THREE.Mesh(strobeGeo, new THREE.MeshBasicMaterial({ color: 0xffffff }));
+        tailStrobe.position.set(0, 0.045, -targetSize * 0.48);
 
-      const wingletGeo = new THREE.BoxGeometry(0.006, 0.05, 0.04);
-      const rightWinglet = new THREE.Mesh(wingletGeo, airlineMat);
-      rightWinglet.position.set(0.37, 0.02, -0.12);
-      plane.add(rightWinglet);
+        // Remove placeholder and mount authentic Boeing 737 with navigation strobes
+        while (aircraftGroup.children.length > 0) {
+          aircraftGroup.remove(aircraftGroup.children[0]);
+        }
+        aircraftGroup.add(modelWrapper);
+        aircraftGroup.add(redStrobe);
+        aircraftGroup.add(greenStrobe);
+        aircraftGroup.add(tailStrobe);
+      },
+      undefined,
+      (err) => {
+        console.warn('Could not load B737.glb, falling back to procedural airliner:', err);
+      }
+    );
 
-      const leftWinglet = new THREE.Mesh(wingletGeo, airlineMat);
-      leftWinglet.position.set(-0.37, 0.02, -0.12);
-      plane.add(leftWinglet);
-
-      const engineGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.12, 12);
-      engineGeo.rotateX(Math.PI / 2);
-      const engineMat = new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.7, roughness: 0.2 });
-
-      const rightEngine = new THREE.Mesh(engineGeo, engineMat);
-      rightEngine.position.set(0.14, -0.035, 0.0);
-      plane.add(rightEngine);
-
-      const leftEngine = new THREE.Mesh(engineGeo, engineMat);
-      leftEngine.position.set(-0.14, -0.035, 0.0);
-      plane.add(leftEngine);
-
-      const finShape = new THREE.Shape();
-      finShape.moveTo(0, 0);
-      finShape.lineTo(0.16, 0);
-      finShape.lineTo(-0.08, 0.14);
-      finShape.lineTo(-0.14, 0);
-      finShape.closePath();
-
-      const finGeo = new THREE.ExtrudeGeometry(finShape, { depth: 0.008, bevelEnabled: false });
-      finGeo.rotateY(Math.PI / 2);
-      const fin = new THREE.Mesh(finGeo, airlineMat);
-      fin.position.set(0.004, 0.03, -0.12);
-      plane.add(fin);
-
-      const elevShape = new THREE.Shape();
-      elevShape.moveTo(0, 0);
-      elevShape.lineTo(0.14, -0.06);
-      elevShape.lineTo(0.13, -0.09);
-      elevShape.lineTo(0, -0.04);
-      elevShape.closePath();
-
-      const elevGeo = new THREE.ExtrudeGeometry(elevShape, { depth: 0.006, bevelEnabled: false });
-      elevGeo.rotateX(Math.PI / 2);
-
-      const rightElev = new THREE.Mesh(elevGeo, wingMat);
-      rightElev.position.set(0.01, 0.02, -0.18);
-      plane.add(rightElev);
-
-      const leftElev = new THREE.Mesh(elevGeo, wingMat);
-      leftElev.scale.set(-1, 1, 1);
-      leftElev.position.set(-0.01, 0.02, -0.18);
-      plane.add(leftElev);
-
-      const strobeGeo = new THREE.SphereGeometry(0.008, 6, 6);
-      const redMesh = new THREE.Mesh(strobeGeo, new THREE.MeshBasicMaterial({ color: 0xef4444 }));
-      redMesh.position.set(-0.37, 0.045, -0.12);
-      plane.add(redMesh);
-
-      const greenMesh = new THREE.Mesh(strobeGeo, new THREE.MeshBasicMaterial({ color: 0x22c55e }));
-      greenMesh.position.set(0.37, 0.045, -0.12);
-      plane.add(greenMesh);
-
-      plane.scale.set(0.48, 0.48, 0.48);
-      return plane;
-    }
-
-    const aircraft = createProceduralAircraft();
-    scene.add(aircraft);
-    aircraftRef.current = aircraft;
-
-    // Start camera directly in front of the Departure Airport facing center of Globe!
+    // Initial camera position directly in front of Departure Airport
     const depPos = latLngToVector3(departure.lat, departure.lng, globeRadius);
     const depDir = depPos.clone().normalize();
-    camera.position.copy(depDir.clone().multiplyScalar(7.2).add(new THREE.Vector3(0, 0.4, 0)));
-    controls.target.set(0, 0, 0); // Globe is center of screen!
+    const initialDistance = 5.8;
+    camera.position.copy(depDir.clone().multiplyScalar(initialDistance));
+    camera.lookAt(0, 0, 0);
+    controls.target.set(0, 0, 0);
     controls.update();
 
     // User interaction detection: stop auto-following when user scrolls or drags
@@ -503,10 +495,12 @@ export const FlightGlobe3D: React.FC<FlightGlobe3DProps> = ({
 
         aircraftRef.current.position.copy(state.position);
 
-        const targetPos = state.position.clone().add(state.tangent);
+        // Orient aircraft along flight trajectory
+        // Forward target points along +tangent; Three.js Object3D.lookAt aligns local +Z (nose) with tangent
+        const forwardTarget = state.position.clone().add(state.tangent);
         const upVec = state.position.clone().normalize();
         aircraftRef.current.up.copy(upVec);
-        aircraftRef.current.lookAt(targetPos);
+        aircraftRef.current.lookAt(forwardTarget);
 
         if (trailRef.current) {
           const totalPoints = pts.length;
@@ -521,28 +515,32 @@ export const FlightGlobe3D: React.FC<FlightGlobe3DProps> = ({
         const currentMode = cameraModeRef.current;
         if (currentMode === 'globe') {
           controls.target.set(0, 0, 0);
-          // If user hasn't scrolled or dragged away, follow the plane around the globe
+          // Auto-follow maintains mathematical distance invariance (zero zoom-out drift)
           if (!isUserTrackingPausedRef.current) {
+            const currentDist = camera.position.length();
             const planeDir = state.position.clone().normalize();
-            const currentDist = Math.max(4.5, camera.position.length() || 7.2);
-            const targetCamPos = planeDir.multiplyScalar(currentDist).add(new THREE.Vector3(0, 0.35, 0));
-            camera.position.lerp(targetCamPos, 0.04);
+            const currentDir = camera.position.clone().normalize();
+            currentDir.lerp(planeDir, 0.04).normalize();
+            camera.position.copy(currentDir.multiplyScalar(currentDist));
           }
         } else if (currentMode === 'follow') {
-          const backwardVec = state.tangent.clone().multiplyScalar(-1.15);
+          const backwardVec = state.tangent.clone().multiplyScalar(-0.65);
           const chaseCamPos = state.position
             .clone()
             .add(backwardVec)
-            .add(upVec.clone().multiplyScalar(0.45));
+            .add(upVec.clone().multiplyScalar(0.28));
 
           camera.position.lerp(chaseCamPos, 0.08);
           controls.target.lerp(state.position, 0.1);
         } else if (currentMode === 'cockpit') {
-          const forwardTarget = state.position.clone().add(state.tangent.clone().multiplyScalar(1.2));
-          const cockpitPos = state.position.clone().add(upVec.clone().multiplyScalar(0.08));
+          const cockpitTarget = state.position.clone().add(state.tangent.clone().multiplyScalar(1.0));
+          const cockpitPos = state.position
+            .clone()
+            .add(upVec.clone().multiplyScalar(0.04))
+            .add(state.tangent.clone().multiplyScalar(0.05));
 
           camera.position.lerp(cockpitPos, 0.1);
-          controls.target.lerp(forwardTarget, 0.1);
+          controls.target.lerp(cockpitTarget, 0.1);
         }
       }
 
@@ -630,17 +628,17 @@ export const FlightGlobe3D: React.FC<FlightGlobe3DProps> = ({
 
       {/* Floating button to resume following plane when user has scrolled away */}
       {!isTrackingPlane && cameraMode === 'globe' && (
-        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 pointer-events-auto">
+        <div className="absolute top-36 left-1/2 -translate-x-1/2 z-30 pointer-events-auto">
           <button
             type="button"
             onClick={() => {
               isUserTrackingPausedRef.current = false;
               setIsTrackingPlane(true);
             }}
-            className="px-4 py-1.5 rounded-full bg-slate-900/90 hover:bg-slate-800 border border-sky-500/40 text-sky-300 hover:text-white text-xs font-mono font-semibold backdrop-blur-md shadow-xl flex items-center gap-1.5 transition-all cursor-pointer hover:scale-105 active:scale-95"
+            className="px-4 py-2 rounded-full bg-slate-900/90 hover:bg-slate-800 border border-sky-500/40 text-sky-300 hover:text-white text-xs font-mono font-semibold backdrop-blur-md shadow-2xl flex items-center gap-2 transition-all cursor-pointer hover:scale-105 active:scale-95 ring-1 ring-sky-500/30"
           >
-            <Compass className="w-3.5 h-3.5 text-sky-400" />
-            <span>Resume Following Plane</span>
+            <Compass className="w-4 h-4 text-sky-400 animate-spin" style={{ animationDuration: '6s' }} />
+            <span>Resume Following Aircraft</span>
           </button>
         </div>
       )}
